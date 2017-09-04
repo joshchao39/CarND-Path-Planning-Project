@@ -203,7 +203,10 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  int lane = 1;
+  double ref_vel = 0.0;
+
+  h.onMessage([&lane, &ref_vel, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -211,9 +214,7 @@ int main() {
     //auto sdata = string(data).substr(0, length);
     //cout << sdata << endl;
 
-    int lane = 1;
-    double ref_vel = 49.5;
-
+    double max_vel = 49.5;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
 
       auto s = hasData(data);
@@ -246,6 +247,90 @@ int main() {
 
 						// Size of previous path points that has not been executed yet
 						int prev_size = previous_path_x.size();
+
+            if (prev_size > 0) {
+              car_s = end_path_s;
+            }
+
+            bool too_close = false;
+
+            double center_car_vel = max_vel;
+            double center_car_s = 100;
+            double left_car_vel = max_vel;
+            double left_car_s = 100;
+            double right_car_vel = max_vel;
+            double right_car_s = 100;
+            double left_possibility_cost = lane > 0 ? 0 : 99999;
+            double right_possibility_cost = lane < 2 ? 0 : 99999;
+            for (const auto &other : sensor_fusion) {
+              float d = other[6];
+              if (d < (2+4*lane+2) && d > (2+4*lane-2)) {
+                double other_vx = other[3];
+                double other_vy = other[4];
+                double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
+                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                if (other_s > -3 && other_s < center_car_s) {
+                  center_car_s = other_s;
+                  center_car_vel = other_v;
+                }
+              }
+              if (lane > 0 && d < (2+4*(lane-1)+2) && d > (2+4*(lane-1)-2)) {
+                double other_vx = other[3];
+                double other_vy = other[4];
+                double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
+                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                if (other_s > -3 && other_s < left_car_s) {
+                  left_car_s = other_s;
+                  left_car_vel = other_v;
+                }
+              }
+              if (lane < 2 && d < (2+4*(lane+1)+2) && d > (2+4*(lane+1)-2)) {
+                double other_vx = other[3];
+                double other_vy = other[4];
+                double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
+                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                if (other_s > -3 && other_s < right_car_s) {
+                  right_car_s = other_s;
+                  right_car_vel = other_v;
+                }
+              }
+            }
+
+            if (center_car_s < 30) {
+              too_close = true;
+            }
+
+            double off_lane_error = car_d - 2+4*lane;
+
+            double velocity_weight = 1.0;
+            double distance_weight = 3.0;
+
+            double center_cost = velocity_weight / center_car_vel + distance_weight / abs(center_car_s);
+            double left_cost = velocity_weight / left_car_vel +
+                    distance_weight / abs(left_car_s) +
+                    left_possibility_cost;
+            double right_cost = velocity_weight / right_car_vel +
+                    distance_weight / abs(right_car_s) +
+                    right_possibility_cost;
+
+            if (left_cost < center_cost && left_cost < right_cost && car_d < (2+4*lane+2) && car_d > (2+4*lane-2)) {
+              lane -= 1;
+            }
+            if (right_cost < center_cost && right_cost < left_cost && car_d < (2+4*lane+2) && car_d > (2+4*lane-2)) {
+              lane += 1;
+            }
+
+            if (too_close) {
+              if (ref_vel > center_car_vel) {
+                ref_vel -= 0.448;
+              }
+            } else {
+              if (ref_vel < max_vel) {
+                ref_vel += 0.448;
+              }
+            }
+            bool in_lane = car_d < (2+4*lane+2) && car_d > (2+4*lane-2);
+            cout << left_cost << "\t" << center_cost << "\t" << right_cost << "\t" << in_lane << endl;
 
           	json msgJson;
 
