@@ -71,7 +71,7 @@ A simple heuristic rule is used to slow down the car when the car in the front i
   <img src="example.gif" alt="Passing Slower Car"/>
 </p>
 
-Full video can be found [here](https://youtu.be/BIWhmaCRS7Q)
+Full video can be found [here](https://youtu.be/Ht2TrzXiF90)
 
 ## Other Notes
 1. This approach, while not optimal, works well for the designed constraint and requirement. The ego vehicle is capable of going around the track endlessly while passing slower cars.

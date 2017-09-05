@@ -18,8 +18,6 @@ using json = nlohmann::json;
 
 // constants
 double time_step = 0.02;
-double max_acc = 9;
-double max_jerk = 9;
 
 // For converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
@@ -272,7 +270,7 @@ int main() {
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
                 // Predict the distance at the end of previous planning assuming constant velocity
-                double other_dist = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                double other_dist = (double)other[5] + (double)prev_size*time_step*other_v - car_s;
                 if (other_dist > -3 && other_dist < center_car_dist) {
                   center_car_dist = other_dist;
                   center_car_vel = other_v;
@@ -282,7 +280,7 @@ int main() {
                 double other_vx = other[3];
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
-                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                double other_s = (double)other[5] + (double)prev_size*time_step*other_v - car_s;
                 if (other_s > -3 && other_s < left_car_dist) {
                   left_car_dist = other_s;
                   left_car_vel = other_v;
@@ -292,7 +290,7 @@ int main() {
                 double other_vx = other[3];
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
-                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                double other_s = (double)other[5] + (double)prev_size*time_step*other_v - car_s;
                 if (other_s > -3 && other_s < right_car_dist) {
                   right_car_dist = other_s;
                   right_car_vel = other_v;
@@ -397,7 +395,7 @@ int main() {
             double x_add_on = 0;
 
             for (int i = 1; i <= 50-prev_size; i++) {
-              double N = target_dist/(0.02*ref_vel/2.24);
+              double N = target_dist/(time_step*ref_vel/2.24);
               double x_point = x_add_on+target_x/N;
               double y_point = spl(x_point);
 
