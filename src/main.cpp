@@ -263,8 +263,8 @@ int main() {
             double left_car_dist = 100;
             double right_car_vel = max_vel;
             double right_car_dist = 100;
-            double left_possibility_cost = lane > 0 ? 0 : 99999; // Prevent change lane out of the road
-            double right_possibility_cost = lane < 2 ? 0 : 99999;
+            double left_possibility_cost = lane > 0 ? 0.0 : 99999.0; // Prevent change lane out of the road
+            double right_possibility_cost = lane < 2 ? 0.0 : 99999.0;
             for (const auto &other : sensor_fusion) {
               float d = other[6];
               if (d < (2+4*lane+2) && d > (2+4*lane-2)) {
