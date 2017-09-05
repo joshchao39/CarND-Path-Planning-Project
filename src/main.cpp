@@ -248,19 +248,22 @@ int main() {
 						// Size of previous path points that has not been executed yet
 						int prev_size = previous_path_x.size();
 
+            // Plan from the end of the previous path points
             if (prev_size > 0) {
               car_s = end_path_s;
             }
 
             bool too_close = false;
 
+            // Calculate the distance and velocity of the closest car in front of the ego vehicle in current and
+            // adjacent lanes. Note center lane indicates the lane the ego vehicle is currently in.
             double center_car_vel = max_vel;
-            double center_car_s = 100;
+            double center_car_dist = 100;
             double left_car_vel = max_vel;
-            double left_car_s = 100;
+            double left_car_dist = 100;
             double right_car_vel = max_vel;
-            double right_car_s = 100;
-            double left_possibility_cost = lane > 0 ? 0 : 99999;
+            double right_car_dist = 100;
+            double left_possibility_cost = lane > 0 ? 0 : 99999; // Prevent change lane out of the road
             double right_possibility_cost = lane < 2 ? 0 : 99999;
             for (const auto &other : sensor_fusion) {
               float d = other[6];
@@ -268,9 +271,10 @@ int main() {
                 double other_vx = other[3];
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
-                double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
-                if (other_s > -3 && other_s < center_car_s) {
-                  center_car_s = other_s;
+                // Predict the distance at the end of previous planning assuming constant velocity
+                double other_dist = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
+                if (other_dist > -3 && other_dist < center_car_dist) {
+                  center_car_dist = other_dist;
                   center_car_vel = other_v;
                 }
               }
@@ -279,8 +283,8 @@ int main() {
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
                 double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
-                if (other_s > -3 && other_s < left_car_s) {
-                  left_car_s = other_s;
+                if (other_s > -3 && other_s < left_car_dist) {
+                  left_car_dist = other_s;
                   left_car_vel = other_v;
                 }
               }
@@ -289,30 +293,30 @@ int main() {
                 double other_vy = other[4];
                 double other_v = sqrt(other_vx*other_vx+other_vy*other_vy);
                 double other_s = (double)other[5] + (double)prev_size*0.02*other_v - car_s;
-                if (other_s > -3 && other_s < right_car_s) {
-                  right_car_s = other_s;
+                if (other_s > -3 && other_s < right_car_dist) {
+                  right_car_dist = other_s;
                   right_car_vel = other_v;
                 }
               }
             }
 
-            if (center_car_s < 30) {
+            // Slow down signal when the car in front is too close
+            if (center_car_dist < 30) {
               too_close = true;
             }
 
-            double off_lane_error = car_d - 2+4*lane;
-
+            // Calculate the cost of each lane
             double velocity_weight = 1.0;
             double distance_weight = 3.0;
-
-            double center_cost = velocity_weight / center_car_vel + distance_weight / abs(center_car_s);
+            double center_cost = velocity_weight / center_car_vel + distance_weight / abs(center_car_dist);
             double left_cost = velocity_weight / left_car_vel +
-                    distance_weight / abs(left_car_s) +
+                    distance_weight / abs(left_car_dist) +
                     left_possibility_cost;
             double right_cost = velocity_weight / right_car_vel +
-                    distance_weight / abs(right_car_s) +
+                    distance_weight / abs(right_car_dist) +
                     right_possibility_cost;
 
+            // Change lane if the adjacent lane has lower cost and the ego vehicle is not already changing lane
             if (left_cost < center_cost && left_cost < right_cost && car_d < (2+4*lane+2) && car_d > (2+4*lane-2)) {
               lane -= 1;
             }
@@ -320,6 +324,7 @@ int main() {
               lane += 1;
             }
 
+            // Slow down and speed down based on signal in constant acceleration
             if (too_close) {
               if (ref_vel > center_car_vel) {
                 ref_vel -= 0.448;
@@ -329,11 +334,10 @@ int main() {
                 ref_vel += 0.448;
               }
             }
-            bool in_lane = car_d < (2+4*lane+2) && car_d > (2+4*lane-2);
-            cout << left_cost << "\t" << center_cost << "\t" << right_cost << "\t" << in_lane << endl;
 
           	json msgJson;
 
+            // Compute planning points ahead
             vector<double> ptsx;
             vector<double> ptsy;
 
@@ -378,9 +382,11 @@ int main() {
               ptsy[i] = (shift_x * sin(0-ref_yaw) + shift_y * cos(0-ref_yaw));
             }
 
+            // Use Spline to smooth planning points
             spline spl;
             spl.set_points(ptsx, ptsy);
 
+            // Extract (x,y) from spline function and convert to global coordinate
             vector<double> next_x_vals = previous_path_x;
             vector<double> next_y_vals = previous_path_y;
 
@@ -409,7 +415,6 @@ int main() {
               next_y_vals.push_back(y_point);
             }
 
-          	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
